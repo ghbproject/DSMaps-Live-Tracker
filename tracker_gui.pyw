@@ -13,9 +13,17 @@ from tkinter import ttk
 import tracker
 
 
-VERSION = "4.0.1"
+VERSION = "4.0.2"
 MANIFEST_URL = "https://dsmaps.com/downloads/live-tracker-manifest.json"
 SITE_URL = "https://dsmaps.com/"
+
+
+def version_key(value: object) -> tuple[int, int, int]:
+    parts = []
+    for token in str(value).split("."):
+        digits = "".join(character for character in token if character.isdigit())
+        parts.append(int(digits or 0))
+    return tuple((parts + [0, 0, 0])[:3])
 
 
 class TrackerApp:
@@ -94,7 +102,7 @@ class TrackerApp:
             request = urllib.request.Request(MANIFEST_URL, headers={"User-Agent": f"DSMapsLiveTracker/{VERSION}"})
             with urllib.request.urlopen(request, timeout=5) as response:
                 manifest = json.load(response)
-            if str(manifest.get("version", VERSION)) != VERSION and manifest.get("downloadUrl"):
+            if version_key(manifest.get("version", VERSION)) > version_key(VERSION) and manifest.get("downloadUrl"):
                 self.update_url = str(manifest["downloadUrl"])
                 self.events.put(("update", f"새 버전 {manifest['version']}을 사용할 수 있습니다."))
         except Exception:
