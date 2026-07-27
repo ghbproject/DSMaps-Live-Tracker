@@ -186,7 +186,7 @@ class TrackerRequestHandler(BaseHTTPRequestHandler):
     """Expose only the minimum position JSON endpoint."""
 
     def do_GET(self):
-        if self.path != "/position":
+        if urlparse(self.path).path != "/position":
             self.send_error(404)
             return
         with _state_lock:
@@ -198,7 +198,7 @@ class TrackerRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_OPTIONS(self):
-        if self.path != "/position":
+        if urlparse(self.path).path != "/position":
             self.send_error(404)
             return
         self.send_response(204)
