@@ -13,8 +13,9 @@ from tkinter import ttk
 import tracker
 
 
-VERSION = "4.0.3"
+VERSION = "4.0.4"
 MANIFEST_URL = "https://dsmaps.com/downloads/live-tracker-manifest.json"
+GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/ghbproject/DSMaps-Live-Tracker/releases/latest"
 SITE_URL = "https://dsmaps.com/"
 
 
@@ -98,15 +99,26 @@ class TrackerApp:
             self.stop_event.wait(0.25)
 
     def check_update(self):
-        try:
-            request = urllib.request.Request(MANIFEST_URL, headers={"User-Agent": f"DSMapsLiveTracker/{VERSION}"})
-            with urllib.request.urlopen(request, timeout=5) as response:
-                manifest = json.load(response)
-            if version_key(manifest.get("version", VERSION)) > version_key(VERSION) and manifest.get("downloadUrl"):
-                self.update_url = str(manifest["downloadUrl"])
-                self.events.put(("update", f"새 버전 {manifest['version']}을 사용할 수 있습니다."))
-        except Exception:
-            pass
+        sources = (
+            (GITHUB_LATEST_RELEASE_URL, "tag_name", "html_url"),
+            (MANIFEST_URL, "version", "downloadUrl"),
+        )
+        for url, version_field, download_field in sources:
+            try:
+                request = urllib.request.Request(url, headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": f"DSMapsLiveTracker/{VERSION}",
+                })
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    release = json.load(response)
+                latest_version = str(release.get(version_field, VERSION)).lstrip("vV")
+                download_url = release.get(download_field)
+                if version_key(latest_version) > version_key(VERSION) and download_url:
+                    self.update_url = str(download_url)
+                    self.events.put(("update", f"새 버전 {latest_version}을 사용할 수 있습니다."))
+                return
+            except Exception:
+                continue
 
     def drain_events(self):
         try:
