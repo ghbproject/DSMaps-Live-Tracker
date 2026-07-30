@@ -13,7 +13,7 @@ from tkinter import ttk
 import tracker
 
 
-VERSION = "4.0.2"
+VERSION = "4.0.3"
 MANIFEST_URL = "https://dsmaps.com/downloads/live-tracker-manifest.json"
 SITE_URL = "https://dsmaps.com/"
 

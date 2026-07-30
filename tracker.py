@@ -31,7 +31,8 @@ TH32CS_SNAPMODULE32 = 0x00000010
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 PROCESS_NAME = "DSClient-Win64-Shipping.exe"
-GENGINE_RVA = 0x93EF510
+GENGINE_RVA = 0x93F0510
+GENGINE_SCAN_RADIUS = 0x40000
 
 
 class PROCESSENTRY32W(ctypes.Structure):
@@ -111,6 +112,7 @@ class GameReader:
         self.handle = k32.OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())
+        self.engine_address = self._resolve_engine_address()
 
     def close(self):
         if self.handle:
@@ -133,9 +135,8 @@ class GameReader:
             raise RuntimeError("pointer chain is temporarily unavailable")
         return value
 
-    def sample(self) -> dict:
-        # Resolve the complete chain on every sample so map changes are handled.
-        engine = self.ptr(self.base + GENGINE_RVA)
+    def _position_from_engine_address(self, engine_address: int) -> tuple[float, float, float]:
+        engine = self.ptr(engine_address)
         viewport = self.ptr(engine + 0xA58)
         world = self.ptr(viewport + 0x78)
         game_instance = self.ptr(viewport + 0x80)
@@ -144,9 +145,37 @@ class GameReader:
         controller = self.ptr(local_player + 0x30)
         pawn = self.ptr(controller + 0x2D8)
         root = self.ptr(pawn + 0x1A0)
-        x, y, z = struct.unpack("<ddd", self.read(root + 0x128, 24))
-        if not all(math.isfinite(v) and abs(v) < 1e9 for v in (x, y, z)):
+        values = struct.unpack("<ddd", self.read(root + 0x128, 24))
+        if not all(math.isfinite(value) and abs(value) < 1e9 for value in values):
             raise RuntimeError("invalid coordinate values")
+        return values
+
+    def _resolve_engine_address(self) -> int:
+        """Locate GEngine near the known RVA when a game patch shifts globals."""
+        hinted_address = self.base + GENGINE_RVA
+        try:
+            self._position_from_engine_address(hinted_address)
+            return hinted_address
+        except RuntimeError:
+            pass
+
+        start = hinted_address - GENGINE_SCAN_RADIUS
+        data = self.read(start, GENGINE_SCAN_RADIUS * 2)
+        for offset in range(0, len(data) - 8, 8):
+            candidate = struct.unpack_from("<Q", data, offset)[0]
+            if not 0x10000 < candidate < 0x0000800000000000:
+                continue
+            address = start + offset
+            try:
+                self._position_from_engine_address(address)
+                return address
+            except RuntimeError:
+                continue
+        raise RuntimeError("game engine pointer not found; a tracker update may be required")
+
+    def sample(self) -> dict:
+        # Resolve the complete chain on every sample so map changes are handled.
+        x, y, z = self._position_from_engine_address(self.engine_address)
         return {
             "status": "ok",
             "timestamp": datetime.now(timezone.utc).isoformat(),
