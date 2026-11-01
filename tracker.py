@@ -31,7 +31,7 @@ TH32CS_SNAPMODULE32 = 0x00000010
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 PROCESS_NAME = "DSClient-Win64-Shipping.exe"
-GENGINE_RVA = 0x93F0510
+GENGINE_RVA = 0x960FCC8
 GENGINE_SCAN_RADIUS = 0x40000
 
 
@@ -175,7 +175,11 @@ class GameReader:
 
     def sample(self) -> dict:
         # Resolve the complete chain on every sample so map changes are handled.
-        x, y, z = self._position_from_engine_address(self.engine_address)
+        try:
+            x, y, z = self._position_from_engine_address(self.engine_address)
+        except RuntimeError:
+            self.engine_address = self._resolve_engine_address()
+            x, y, z = self._position_from_engine_address(self.engine_address)
         return {
             "status": "ok",
             "timestamp": datetime.now(timezone.utc).isoformat(),
